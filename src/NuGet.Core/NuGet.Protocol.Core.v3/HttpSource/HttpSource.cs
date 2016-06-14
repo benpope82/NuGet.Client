@@ -21,7 +21,6 @@ namespace NuGet.Protocol
 {
     public class HttpSource : IDisposable
     {
-        public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromSeconds(60);
         private const int BufferSize = 8192;
         private readonly Func<Task<HttpHandlerResource>> _messageHandlerFactory;
         private readonly Uri _baseUri;
@@ -31,10 +30,6 @@ namespace NuGet.Protocol
 
         // Only one thread may re-create the http client at a time.
         private readonly SemaphoreSlim _httpClientLock = new SemaphoreSlim(1, 1);
-
-        /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
-        /// <summary>This API is intended only for testing purposes and should not be used in product code.</summary>
-        public TimeSpan DownloadTimeout { get; set; } = DefaultDownloadTimeout;
 
         /// <summary>The retry handler to use for all HTTP requests.</summary>
         /// <summary>This API is intended only for testing purposes and should not be used in product code.</summary>
@@ -117,6 +112,7 @@ namespace NuGet.Protocol
                     Func<Task<HttpResponseMessage>> httpRequest = () => SendWithRetrySupportAsync(
                             requestFactory,
                             request.RequestTimeout,
+                            request.DownloadTimeout,
                             log,
                             lockedToken);
 
@@ -178,6 +174,7 @@ namespace NuGet.Protocol
             Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
                     request.RequestFactory,
                     request.RequestTimeout,
+                    request.DownloadTimeout,
                     log,
                     token);
 
@@ -213,6 +210,7 @@ namespace NuGet.Protocol
             Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
                 request.RequestFactory,
                 request.RequestTimeout,
+                request.DownloadTimeout,
                 log,
                 token);
 
@@ -238,12 +236,11 @@ namespace NuGet.Protocol
                 response.EnsureSuccessStatusCode();
 
                 var networkStream = await response.Content.ReadAsStreamAsync();
-                var timeoutStream = new DownloadTimeoutStream(request.Uri, networkStream, DownloadTimeout);
 
                 return new HttpSourceResult(
                     HttpSourceResultStatus.OpenedFromNetwork,
                     null,
-                    timeoutStream);
+                    networkStream);
             }
             catch
             {
@@ -263,6 +260,7 @@ namespace NuGet.Protocol
         private async Task<HttpResponseMessage> SendWithRetrySupportAsync(
             Func<HttpRequestMessage> requestFactory,
             TimeSpan requestTimeout,
+            TimeSpan downloadTimeout,
             ILogger log,
             CancellationToken cancellationToken)
         {
@@ -271,7 +269,8 @@ namespace NuGet.Protocol
             // Build the retriable request.
             var request = new HttpRetryHandlerRequest(_httpClient, requestFactory)
             {
-                RequestTimeout = requestTimeout
+                RequestTimeout = requestTimeout,
+                DownloadTimeout = downloadTimeout
             };
 
             // Read the response headers before reading the entire stream to avoid timeouts from large packages.
@@ -371,9 +370,8 @@ namespace NuGet.Protocol
                 useAsync: true))
             {
                 using (var networkStream = await response.Content.ReadAsStreamAsync())
-                using (var timeoutStream = new DownloadTimeoutStream(uri, networkStream, DownloadTimeout))
                 {
-                    await timeoutStream.CopyToAsync(fileStream, 8192, cancellationToken);
+                    await networkStream.CopyToAsync(fileStream, 8192, cancellationToken);
                 }
 
                 // Validate the content before putting it into the cache.

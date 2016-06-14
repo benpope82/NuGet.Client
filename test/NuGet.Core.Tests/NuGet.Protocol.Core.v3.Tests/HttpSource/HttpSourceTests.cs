@@ -59,23 +59,6 @@ namespace NuGet.Protocol.Tests
         }
 
         [Fact]
-        public void HttpSource_DefaultDownloadTimeout()
-        {
-            // Arrange
-            using (var td = TestFileSystemUtility.CreateRandomTestFolder())
-            {
-                var tc = new TestContext(td);
-                var expected = TimeSpan.FromSeconds(60);
-
-                // Act
-                var actual = tc.HttpSource.DownloadTimeout;
-
-                // Assert
-                Assert.Equal(expected, actual);
-            }
-        }
-
-        [Fact]
         public async Task HttpSource_HasDefaultResponseTimeout()
         {
             // Arrange
@@ -162,15 +145,17 @@ namespace NuGet.Protocol.Tests
                 var handlerResource = new HttpHandlerResourceV3(handler, handler);
                 var httpSource = new HttpSource(packageSource, () => Task.FromResult((HttpHandlerResource)handlerResource))
                 {
-                    HttpCacheDirectory = td,
-                    DownloadTimeout = TimeSpan.FromMilliseconds(expectedMilliseconds)
+                    HttpCacheDirectory = td
                 };
                 var logger = new TestLogger();
 
                 // Act & Assert
                 var actual = await Assert.ThrowsAsync<IOException>(() =>
                     server.ExecuteAsync(uri => httpSource.GetJObjectAsync(
-                        new HttpSourceRequest(uri, logger),
+                        new HttpSourceRequest(uri, logger)
+                        {
+                            DownloadTimeout = TimeSpan.FromMilliseconds(expectedMilliseconds)
+                        },
                         logger,
                         CancellationToken.None)));
                 Assert.IsType<TimeoutException>(actual.InnerException);

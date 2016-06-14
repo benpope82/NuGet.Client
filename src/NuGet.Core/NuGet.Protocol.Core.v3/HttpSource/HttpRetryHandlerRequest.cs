@@ -12,6 +12,8 @@ namespace NuGet.Protocol
     /// </summary>
     public class HttpRetryHandlerRequest
     {
+        public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromSeconds(60);
+
         public HttpRetryHandlerRequest(HttpClient httpClient, Func<HttpRequestMessage> requestFactory)
         {
             HttpClient = httpClient;
@@ -20,6 +22,7 @@ namespace NuGet.Protocol
             MaxTries = 3;
             RequestTimeout = TimeSpan.FromSeconds(100);
             RetryDelay = TimeSpan.FromMilliseconds(200);
+            DownloadTimeout = DefaultDownloadTimeout;
         }
 
         /// <summary>The HTTP client to use for each request attempt.</summary>
@@ -43,5 +46,8 @@ namespace NuGet.Protocol
         /// <summary>How long to wait before trying again after a failed request.</summary>
         /// <summary>This API is intended only for testing purposes and should not be used in product code.</summary>
         public TimeSpan RetryDelay { get; set; }
+
+        /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
+        public TimeSpan DownloadTimeout { get; set; }
     }
 }

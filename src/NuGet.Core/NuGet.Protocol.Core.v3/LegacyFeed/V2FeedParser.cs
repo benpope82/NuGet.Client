@@ -446,8 +446,7 @@ namespace NuGet.Protocol
                     if (response.StatusCode == HttpStatusCode.OK)
                     {
                         var networkStream = await response.Content.ReadAsStreamAsync();
-                        var timeoutStream = new DownloadTimeoutStream(uri, networkStream, _httpSource.DownloadTimeout);
-                        return LoadXml(timeoutStream);
+                        return LoadXml(networkStream);
                     }
                     else if (ignoreNotFounds && response.StatusCode == HttpStatusCode.NotFound)
                     {

@@ -4,8 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
@@ -349,13 +351,58 @@ namespace NuGet.Protocol.Tests
 
             // Act
             var response = await retryHandler.SendAsync(
-               request,
+                request,
                 new TestLogger(),
                 CancellationToken.None);
 
             // Assert
             Assert.Equal(1, hits);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task HttpRetryHandler_TimesOutDownload()
+        {
+            // Arrange
+            var hits = 0;
+            var memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("foobar"));
+            var expectedMilliseconds = 50;
+            Func<HttpRequestMessage, HttpResponseMessage> handler = requestMessage =>
+            {
+                hits++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StreamContent(new SlowStream(memoryStream)
+                    {
+                        DelayPerByte = TimeSpan.FromSeconds(1)
+                    })
+                };
+            };
+
+            var retryHandler = new HttpRetryHandler();
+            var testHandler = new TestHandler(handler);
+            var httpClient = new HttpClient(testHandler);
+            var request = new HttpRetryHandlerRequest(httpClient, () => new HttpRequestMessage(HttpMethod.Get, TestUrl))
+            {
+                DownloadTimeout = TimeSpan.FromMilliseconds(expectedMilliseconds)
+            };
+            var destinationStream = new MemoryStream();
+
+            // Act
+            var response = await retryHandler.SendAsync(
+                request,
+                new TestLogger(),
+                CancellationToken.None);
+            var stream = await response.Content.ReadAsStreamAsync();
+            var actual = await Assert.ThrowsAsync<IOException>(() => stream.CopyToAsync(destinationStream));
+
+            // Assert
+            Assert.Equal(1, hits);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.IsType<TimeoutException>(actual.InnerException);
+            Assert.EndsWith(
+                $"timed out because no data was received for {expectedMilliseconds}ms.",
+                actual.Message);
         }
 
         [Fact]

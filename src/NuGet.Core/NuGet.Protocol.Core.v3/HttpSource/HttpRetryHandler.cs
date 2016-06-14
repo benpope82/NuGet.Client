@@ -4,6 +4,8 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,6 +87,15 @@ namespace NuGet.Protocol
                             timeoutMessage,
                             cancellationToken);
 
+                        if (response.Content != null)
+                        {
+                            var networkStream = await response.Content.ReadAsStreamAsync();
+                            response.Content = new DownloadTimeoutStreamContent(
+                                requestUri,
+                                networkStream,
+                                request.DownloadTimeout);
+                        }
+
                         log.LogInformation("  " + string.Format(
                             CultureInfo.InvariantCulture,
                             Strings.Http_ResponseLog,
@@ -103,6 +114,11 @@ namespace NuGet.Protocol
 
                         if (tries >= request.MaxTries)
                         {
+                            if (response != null)
+                            {
+                                response.Dispose();
+                            }
+
                             throw;
                         }
 

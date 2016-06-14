@@ -49,6 +49,7 @@ namespace NuGet.Protocol
             RequestFactory = requestFactory;
             IgnoreNotFounds = false;
             RequestTimeout = DefaultRequestTimeout;
+            DownloadTimeout = HttpRetryHandlerRequest.DefaultDownloadTimeout;
         }
 
         /// <summary>
@@ -75,5 +76,8 @@ namespace NuGet.Protocol
         /// Downloading the response body is not included in this timeout.
         /// </summary>
         public TimeSpan RequestTimeout { get; set; }
+
+        /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
+        public TimeSpan DownloadTimeout { get; set; }
     }
 }
