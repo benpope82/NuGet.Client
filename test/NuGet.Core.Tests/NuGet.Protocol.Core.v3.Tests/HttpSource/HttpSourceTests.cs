@@ -13,7 +13,6 @@ using Moq;
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Protocol.Core.Types;
-using NuGet.Protocol.Tests.Utility;
 using NuGet.Test.Server;
 using NuGet.Test.Utility;
 using Test.Utility;
@@ -44,13 +43,15 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 var result = await tc.HttpSource.GetAsync(
-                    tc.Url,
-                    tc.CacheKey,
-                    tc.CacheContext,
+                    new HttpSourceCachedRequest(
+                        tc.Url,
+                        tc.CacheKey,
+                        tc.CacheContext)
+                    {
+                        EnsureValidContents = tc.GetStreamValidator(validCache: true, validNetwork: true)
+                    },
                     tc.Logger,
-                    ignoreNotFounds: false,
-                    ensureValidContents: tc.GetStreamValidator(validCache: true, validNetwork: true),
-                    cancellationToken: CancellationToken.None);
+                    token: CancellationToken.None);
 
                 // Assert
                 Assert.Equal(HttpSourceResultStatus.NoContent, result.Status);
@@ -91,7 +92,9 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 await tc.HttpSource.ProcessResponseAsync(
-                    () => new HttpRequestMessage(HttpMethod.Get, tc.Url),
+                    new HttpSourceRequest(
+                        tc.Url,
+                        () => new HttpRequestMessage(HttpMethod.Get, tc.Url)),
                     response =>
                     {
                         return Task.FromResult(0);
@@ -123,8 +126,12 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 await tc.HttpSource.ProcessResponseAsync(
-                    () => new HttpRequestMessage(HttpMethod.Get, tc.Url),
-                    timeout,
+                    new HttpSourceRequest(
+                        tc.Url,
+                        () => new HttpRequestMessage(HttpMethod.Get, tc.Url))
+                    {
+                        RequestTimeout = timeout,
+                    },
                     response =>
                     {
                         return Task.FromResult(0);
@@ -158,13 +165,13 @@ namespace NuGet.Protocol.Tests
                     HttpCacheDirectory = td,
                     DownloadTimeout = TimeSpan.FromMilliseconds(expectedMilliseconds)
                 };
+                var logger = new TestLogger();
 
                 // Act & Assert
                 var actual = await Assert.ThrowsAsync<IOException>(() =>
                     server.ExecuteAsync(uri => httpSource.GetJObjectAsync(
-                        new Uri(uri),
-                        false,
-                        new TestLogger(),
+                        new HttpSourceRequest(uri, logger),
+                        logger,
                         CancellationToken.None)));
                 Assert.IsType<TimeoutException>(actual.InnerException);
                 Assert.EndsWith(
@@ -183,13 +190,15 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 var result = await tc.HttpSource.GetAsync(
-                    tc.Url,
-                    tc.CacheKey,
-                    tc.CacheContext,
+                    new HttpSourceCachedRequest(
+                        tc.Url,
+                        tc.CacheKey,
+                        tc.CacheContext)
+                    {
+                        EnsureValidContents = tc.GetStreamValidator(validCache: true, validNetwork: true)
+                    },
                     tc.Logger,
-                    ignoreNotFounds: false,
-                    ensureValidContents: tc.GetStreamValidator(validCache: true, validNetwork: true),
-                    cancellationToken: CancellationToken.None);
+                    CancellationToken.None);
 
                 // Assert
                 Assert.False(tc.ValidatedCacheContent, "The cache content should not have been cached at all.");
@@ -208,13 +217,15 @@ namespace NuGet.Protocol.Tests
 
                 // Act & Assert
                 var exception = await Assert.ThrowsAsync<Exception>(() => tc.HttpSource.GetAsync(
-                    tc.Url,
-                    tc.CacheKey,
-                    tc.CacheContext,
+                    new HttpSourceCachedRequest(
+                        tc.Url,
+                        tc.CacheKey,
+                        tc.CacheContext)
+                    {
+                        EnsureValidContents = tc.GetStreamValidator(validCache: true, validNetwork: false)
+                    },
                     tc.Logger,
-                    ignoreNotFounds: false,
-                    ensureValidContents: tc.GetStreamValidator(validCache: true, validNetwork: false),
-                    cancellationToken: CancellationToken.None));
+                    CancellationToken.None));
 
                 // Assert
                 Assert.Same(tc.NetworkValidationException, exception);
@@ -234,13 +245,15 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 var result = await tc.HttpSource.GetAsync(
-                    tc.Url,
-                    tc.CacheKey,
-                    tc.CacheContext,
+                    new HttpSourceCachedRequest(
+                        tc.Url,
+                        tc.CacheKey,
+                        tc.CacheContext)
+                    {
+                        EnsureValidContents = tc.GetStreamValidator(validCache: true, validNetwork: true)
+                    },
                     tc.Logger,
-                    ignoreNotFounds: false,
-                    ensureValidContents: tc.GetStreamValidator(validCache: true, validNetwork: true),
-                    cancellationToken: CancellationToken.None);
+                    CancellationToken.None);
 
                 // Assert
                 Assert.True(tc.ValidatedCacheContent, "The cache content should have been validated.");
@@ -260,13 +273,15 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 var result = await tc.HttpSource.GetAsync(
-                    tc.Url,
-                    tc.CacheKey,
-                    tc.CacheContext,
+                    new HttpSourceCachedRequest(
+                        tc.Url,
+                        tc.CacheKey,
+                        tc.CacheContext)
+                    {
+                        EnsureValidContents = tc.GetStreamValidator(validCache: false, validNetwork: true)
+                    },
                     tc.Logger,
-                    ignoreNotFounds: false,
-                    ensureValidContents: tc.GetStreamValidator(validCache: false, validNetwork: true),
-                    cancellationToken: CancellationToken.None);
+                    CancellationToken.None);
 
                 // Assert
                 Assert.True(tc.ValidatedCacheContent, "The cache content should have been validated.");
