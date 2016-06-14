@@ -110,11 +110,11 @@ namespace NuGet.Protocol
 
                     // Read the response headers before reading the entire stream to avoid timeouts from large packages.
                     Func<Task<HttpResponseMessage>> httpRequest = () => SendWithRetrySupportAsync(
-                            requestFactory,
-                            request.RequestTimeout,
-                            request.DownloadTimeout,
-                            log,
-                            lockedToken);
+                        requestFactory,
+                        request.RequestTimeout,
+                        request.DownloadTimeout,
+                        log,
+                        lockedToken);
 
                     using (var response = await httpRequest())
                     {
@@ -172,11 +172,11 @@ namespace NuGet.Protocol
             CancellationToken token)
         {
             Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
-                    request.RequestFactory,
-                    request.RequestTimeout,
-                    request.DownloadTimeout,
-                    log,
-                    token);
+                request.RequestFactory,
+                request.RequestTimeout,
+                request.DownloadTimeout,
+                log,
+                token);
 
             using (var response = await requestFactory())
             {
@@ -272,11 +272,8 @@ namespace NuGet.Protocol
                 RequestTimeout = requestTimeout,
                 DownloadTimeout = downloadTimeout
             };
-
-            // Read the response headers before reading the entire stream to avoid timeouts from large packages.
-            var response = await RetryHandler.SendAsync(request, log, cancellationToken);
-
-            return response;
+            
+            return await RetryHandler.SendAsync(request, log, cancellationToken);
         }
 
         private async Task EnsureHttpClientAsync()
@@ -395,20 +392,20 @@ namespace NuGet.Protocol
             if (!File.Exists(result.CacheFile))
             {
                 File.Move(
-                        result.NewCacheFile,
-                        result.CacheFile);
+                    result.NewCacheFile,
+                    result.CacheFile);
             }
 
             // Even the file deletion operation above succeeds but the file is not actually deleted,
             // we can still safely read it because it means that some other process just updated it
             // and we don't need to update it with the same content again.
             result.Stream = new FileStream(
-                    result.CacheFile,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read | FileShare.Delete,
-                    BufferSize,
-                    useAsync: true);
+                result.CacheFile,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete,
+                BufferSize,
+                useAsync: true);
         }
 
         public string HttpCacheDirectory

@@ -4,13 +4,14 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 
 namespace NuGet.Protocol
 {
     public class DownloadTimeoutStreamContent : StreamContent
     {
-        public DownloadTimeoutStreamContent(string downloadName, Stream networkStream, TimeSpan timeout)
-            : base(new DownloadTimeoutStream(downloadName, networkStream, timeout))
+        public DownloadTimeoutStreamContent(string downloadName, Stream networkStream, TimeSpan timeout, SemaphoreSlim semaphore)
+            : base(new DownloadTimeoutStream(downloadName, networkStream, timeout, semaphore))
         {
         }
     }

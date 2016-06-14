@@ -5,7 +5,6 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +34,7 @@ namespace NuGet.Protocol
             var tries = 0;
             HttpResponseMessage response = null;
             var success = false;
+            var ownedSemaphore = false;
 
             while (tries < request.MaxTries && !success)
             {
@@ -68,12 +68,12 @@ namespace NuGet.Protocol
                         // disposing it.
                         response?.Dispose();
 
-                        var timeoutMessage = string.Format(
-                            CultureInfo.CurrentCulture,
-                            Strings.Http_Timeout,
-                            requestMessage.Method,
-                            requestUri,
-                            (int)request.RequestTimeout.TotalMilliseconds);
+                        // Acquire the HTTP semaphore.
+                        if (request.Semaphore != null)
+                        {
+                            await request.Semaphore.WaitAsync();
+                            ownedSemaphore = true;
+                        }
 
                         log.LogInformation("  " + string.Format(
                             CultureInfo.InvariantCulture,
@@ -81,20 +81,38 @@ namespace NuGet.Protocol
                             requestMessage.Method,
                             requestUri));
 
+                        // Issue the request.
+                        var timeoutMessage = string.Format(
+                            CultureInfo.CurrentCulture,
+                            Strings.Http_Timeout,
+                            requestMessage.Method,
+                            requestUri,
+                            (int)request.RequestTimeout.TotalMilliseconds);
                         response = await TimeoutUtility.StartWithTimeout(
                             timeoutToken => request.HttpClient.SendAsync(requestMessage, request.CompletionOption, timeoutToken),
                             request.RequestTimeout,
                             timeoutMessage,
                             cancellationToken);
 
+                        // Wrap the response stream so that the download can timeout and the HTTP
+                        // semaphore is respected.
+                        Stream networkStream;
                         if (response.Content != null)
                         {
-                            var networkStream = await response.Content.ReadAsStreamAsync();
-                            response.Content = new DownloadTimeoutStreamContent(
-                                requestUri,
-                                networkStream,
-                                request.DownloadTimeout);
+                            networkStream = await response.Content.ReadAsStreamAsync();
                         }
+                        else
+                        {
+                            networkStream = Stream.Null;
+                        }
+
+                        var newContent = new DownloadTimeoutStreamContent(
+                            requestUri,
+                            networkStream,
+                            request.DownloadTimeout,
+                            request.Semaphore);
+                        ownedSemaphore = false;
+                        response.Content = newContent;
 
                         log.LogInformation("  " + string.Format(
                             CultureInfo.InvariantCulture,
@@ -108,17 +126,20 @@ namespace NuGet.Protocol
                             success = false;
                         }
                     }
-                    catch (Exception e) when (!(e is OperationCanceledException))
+                    catch (OperationCanceledException)
+                    {
+                        DisposeResponse(request.Semaphore, response, ownedSemaphore);
+
+                        throw;
+                    }
+                    catch (Exception e)
                     {
                         success = false;
 
+                        DisposeResponse(request.Semaphore, response, ownedSemaphore);
+
                         if (tries >= request.MaxTries)
                         {
-                            if (response != null)
-                            {
-                                response.Dispose();
-                            }
-
                             throw;
                         }
 
@@ -135,6 +156,16 @@ namespace NuGet.Protocol
             }
 
             return response;
+        }
+
+        private static void DisposeResponse(SemaphoreSlim semaphore, HttpResponseMessage response, bool ownedSemaphore)
+        {
+            response?.Dispose();
+
+            if (ownedSemaphore && semaphore != null)
+            {
+                semaphore.Release();
+            }
         }
     }
 }
