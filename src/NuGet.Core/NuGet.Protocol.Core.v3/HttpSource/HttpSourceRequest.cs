@@ -13,6 +13,7 @@ namespace NuGet.Protocol
     /// </summary>
     public class HttpSourceRequest
     {
+        public static readonly SemaphoreSlim GlobalSemaphore = new SemaphoreSlim(1);
         public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(100);
 
         public HttpSourceRequest(string uri, ILogger log)
@@ -82,6 +83,6 @@ namespace NuGet.Protocol
         public TimeSpan DownloadTimeout { get; set; }
 
         /// <summary>The semaphore used to limit the concurrently of HTTP requests.</summary>
-        public SemaphoreSlim Semaphore { get; set; }
+        public SemaphoreSlim Semaphore { get; set; } = GlobalSemaphore;
     }
 }

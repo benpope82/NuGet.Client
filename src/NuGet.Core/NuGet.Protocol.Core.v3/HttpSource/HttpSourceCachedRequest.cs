@@ -89,6 +89,6 @@ namespace NuGet.Protocol
         public TimeSpan DownloadTimeout { get; set; }
 
         /// <summary>The semaphore used to limit the concurrently of HTTP requests.</summary>
-        public SemaphoreSlim Semaphore { get; set; }
+        public SemaphoreSlim Semaphore { get; set; } = HttpSourceRequest.GlobalSemaphore;
     }
 }
