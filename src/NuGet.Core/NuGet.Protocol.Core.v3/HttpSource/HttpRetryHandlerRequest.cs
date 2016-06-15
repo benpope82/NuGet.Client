@@ -13,7 +13,6 @@ namespace NuGet.Protocol
     /// </summary>
     public class HttpRetryHandlerRequest
     {
-        private static readonly SemaphoreSlim GlobalLock = new SemaphoreSlim(1);
         public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromSeconds(60);
 
         public HttpRetryHandlerRequest(HttpClient httpClient, Func<HttpRequestMessage> requestFactory)
@@ -53,6 +52,6 @@ namespace NuGet.Protocol
         public TimeSpan DownloadTimeout { get; set; }
 
         /// <summary>The semaphore used to limit the concurrently of HTTP requests.</summary>
-        public SemaphoreSlim Semaphore { get; set; } = GlobalLock;
+        public SemaphoreSlim Semaphore { get; set; }
     }
 }
