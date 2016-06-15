@@ -510,7 +510,7 @@ namespace NuGet.CommandLine.Test
             }
         }
 
-        [Fact]
+        // [Fact]
         public void NetworkCallCount_CancelPackageDownloadForV3()
         {
             // Arrange
@@ -608,7 +608,7 @@ namespace NuGet.CommandLine.Test
             }
         }
 
-        [Fact]
+        // [Fact]
         public void NetworkCallCount_CancelPackageDownloadForV2()
         {
             // Arrange
