@@ -154,14 +154,25 @@ namespace NuGet.Protocol
             ILogger log,
             CancellationToken token)
         {
-            using (var result = await GetAsync(request, log, token))
+            Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
+                request.RequestFactory,
+                request.RequestTimeout,
+                request.DownloadTimeout,
+                log,
+                token);
+
+            using (var response = await requestFactory())
             {
-                if (result.Status == HttpSourceResultStatus.NotFound || result.Status == HttpSourceResultStatus.NoContent)
+                if ((request.IgnoreNotFounds && response.StatusCode == HttpStatusCode.NotFound) ||
+                     response.StatusCode == HttpStatusCode.NoContent)
                 {
                     return await processAsync(null);
                 }
 
-                return await processAsync(result.Stream);
+                response.EnsureSuccessStatusCode();
+
+                var networkStream = await response.Content.ReadAsStreamAsync();
+                return await processAsync(networkStream);
             }
         }
 
@@ -203,58 +214,6 @@ namespace NuGet.Protocol
                 },
                 log: log,
                 token: token);
-        }
-
-        private async Task<HttpSourceResult> GetAsync(HttpSourceRequest request, ILogger log, CancellationToken token)
-        {
-            Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
-                request.RequestFactory,
-                request.RequestTimeout,
-                request.DownloadTimeout,
-                log,
-                token);
-
-            var response = await requestFactory();
-
-            try
-            {
-                if (request.IgnoreNotFounds && response.StatusCode == HttpStatusCode.NotFound)
-                {
-                    response.Dispose();
-
-                    return new HttpSourceResult(HttpSourceResultStatus.NotFound);
-                }
-
-                if (response.StatusCode == HttpStatusCode.NoContent)
-                {
-                    response.Dispose();
-
-                    // Ignore reading and caching the empty stream.
-                    return new HttpSourceResult(HttpSourceResultStatus.NoContent);
-                }
-
-                response.EnsureSuccessStatusCode();
-
-                var networkStream = await response.Content.ReadAsStreamAsync();
-
-                return new HttpSourceResult(
-                    HttpSourceResultStatus.OpenedFromNetwork,
-                    null,
-                    networkStream);
-            }
-            catch
-            {
-                try
-                {
-                    response.Dispose();
-                }
-                catch
-                {
-                    // Nothing we can do here.
-                }
-
-                throw;
-            }
         }
 
         private async Task<HttpResponseMessage> SendWithRetrySupportAsync(
