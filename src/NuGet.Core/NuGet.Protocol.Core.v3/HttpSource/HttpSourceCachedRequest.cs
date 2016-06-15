@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 using NuGet.Protocol.Core.Types;
 
 namespace NuGet.Protocol
@@ -86,5 +87,8 @@ namespace NuGet.Protocol
 
         /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
         public TimeSpan DownloadTimeout { get; set; }
+
+        /// <summary>The semaphore used to limit the concurrently of HTTP requests.</summary>
+        public SemaphoreSlim Semaphore { get; set; }
     }
 }

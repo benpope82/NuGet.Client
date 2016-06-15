@@ -34,7 +34,6 @@ namespace NuGet.Protocol
             var tries = 0;
             HttpResponseMessage response = null;
             var success = false;
-            var ownedSemaphore = false;
 
             while (tries < request.MaxTries && !success)
             {
@@ -67,13 +66,6 @@ namespace NuGet.Protocol
                         // success variable being set to false but the response being returned to the caller without
                         // disposing it.
                         response?.Dispose();
-
-                        // Acquire the HTTP semaphore.
-                        if (request.Semaphore != null)
-                        {
-                            await request.Semaphore.WaitAsync();
-                            ownedSemaphore = true;
-                        }
 
                         log.LogInformation("  " + string.Format(
                             CultureInfo.InvariantCulture,
@@ -109,9 +101,7 @@ namespace NuGet.Protocol
                         var newContent = new DownloadTimeoutStreamContent(
                             requestUri,
                             networkStream,
-                            request.DownloadTimeout,
-                            request.Semaphore);
-                        ownedSemaphore = false;
+                            request.DownloadTimeout);
                         response.Content = newContent;
 
                         log.LogInformation("  " + string.Format(
@@ -128,7 +118,7 @@ namespace NuGet.Protocol
                     }
                     catch (OperationCanceledException)
                     {
-                        DisposeResponse(request.Semaphore, response, ownedSemaphore);
+                        response?.Dispose();
 
                         throw;
                     }
@@ -136,7 +126,7 @@ namespace NuGet.Protocol
                     {
                         success = false;
 
-                        DisposeResponse(request.Semaphore, response, ownedSemaphore);
+                        response?.Dispose();
 
                         if (tries >= request.MaxTries)
                         {
@@ -156,16 +146,6 @@ namespace NuGet.Protocol
             }
 
             return response;
-        }
-
-        private static void DisposeResponse(SemaphoreSlim semaphore, HttpResponseMessage response, bool ownedSemaphore)
-        {
-            response?.Dispose();
-
-            if (ownedSemaphore && semaphore != null)
-            {
-                semaphore.Release();
-            }
         }
     }
 }

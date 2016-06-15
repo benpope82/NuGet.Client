@@ -21,8 +21,7 @@ namespace NuGet.Protocol.Tests
                 new DownloadTimeoutStream(
                     downloadName: null,
                     networkStream: new MemoryStream(),
-                    timeout: TimeSpan.Zero,
-                    semaphore: null));
+                    timeout: TimeSpan.Zero));
             Assert.Equal("downloadName", exception.ParamName);
         }
         
@@ -34,8 +33,7 @@ namespace NuGet.Protocol.Tests
                 new DownloadTimeoutStream(
                     downloadName: "downloadName",
                     networkStream: null,
-                    timeout: TimeSpan.Zero,
-                    semaphore: null));
+                    timeout: TimeSpan.Zero));
 
             Assert.Equal("networkStream", exception.ParamName);
         }
@@ -64,7 +62,7 @@ namespace NuGet.Protocol.Tests
         {
             // Arrange
             var memoryStream = GetStream("foobar");
-            var timeoutStream = new DownloadTimeoutStream("download", memoryStream, TimeSpan.FromSeconds(1), null);
+            var timeoutStream = new DownloadTimeoutStream("download", memoryStream, TimeSpan.FromSeconds(1));
             
             // Act & Assert
             await Assert.ThrowsAsync<NotSupportedException>(() =>
@@ -102,8 +100,7 @@ namespace NuGet.Protocol.Tests
             var timeoutStream = new DownloadTimeoutStream(
                 "download",
                 slowStream,
-                TimeSpan.FromSeconds(1),
-                semaphore: null);
+                TimeSpan.FromSeconds(1));
             
             // Act & Assert
             var actual = await Assert.ThrowsAsync<IOException>(() =>
@@ -124,8 +121,7 @@ namespace NuGet.Protocol.Tests
             var timeoutStream = new DownloadTimeoutStream(
                 expectedDownload,
                 slowStream,
-                TimeSpan.FromMilliseconds(expectedMilliseconds),
-                semaphore: null);
+                TimeSpan.FromMilliseconds(expectedMilliseconds));
             
             // Act & Assert
             var exception = await Assert.ThrowsAsync<IOException>(() =>
@@ -145,8 +141,7 @@ namespace NuGet.Protocol.Tests
             var timeoutStream = new DownloadTimeoutStream(
                 "download",
                 memoryStream,
-                TimeSpan.FromMilliseconds(100),
-                semaphore: null);
+                TimeSpan.FromMilliseconds(100));
             
             // Act
             var actual = await readAsync(timeoutStream);

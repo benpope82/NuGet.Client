@@ -13,10 +13,8 @@ namespace NuGet.Protocol
         private readonly string _downloadName;
         private readonly Stream _networkStream;
         private readonly TimeSpan _timeout;
-        private readonly object _semaphoreLock = new object();
-        private SemaphoreSlim _semaphore;
 
-        public DownloadTimeoutStream(string downloadName, Stream networkStream, TimeSpan timeout, SemaphoreSlim semaphore)
+        public DownloadTimeoutStream(string downloadName, Stream networkStream, TimeSpan timeout)
         {
             if (downloadName == null)
             {
@@ -31,7 +29,6 @@ namespace NuGet.Protocol
             _downloadName = downloadName;
             _networkStream = networkStream;
             _timeout = timeout;
-            _semaphore = semaphore;
         }
 
         public override void Flush()
@@ -99,15 +96,6 @@ namespace NuGet.Protocol
         protected override void Dispose(bool disposing)
         {
             _networkStream.Dispose();
-
-            lock(_semaphoreLock)
-            {
-                if (_semaphore != null)
-                {
-                    _semaphore.Release();
-                    _semaphore = null;
-                }
-            }
         }
 
         public override long Seek(long offset, SeekOrigin origin)

@@ -107,34 +107,34 @@ namespace NuGet.Protocol
 
                         return requestMessage;
                     };
-
-                    // Read the response headers before reading the entire stream to avoid timeouts from large packages.
-                    Func<Task<HttpResponseMessage>> httpRequest = () => SendWithRetrySupportAsync(
+                    
+                    Func<Task<SemaphoreResponse>> responseFactory = () => GetSemaphoreResponseAsync(
                         requestFactory,
                         request.RequestTimeout,
                         request.DownloadTimeout,
+                        request.Semaphore,
                         log,
                         lockedToken);
 
-                    using (var response = await httpRequest())
+                    using (var semaphoreResponse = await responseFactory())
                     {
-                        if (request.IgnoreNotFounds && response.StatusCode == HttpStatusCode.NotFound)
+                        if (request.IgnoreNotFounds && semaphoreResponse.Response.StatusCode == HttpStatusCode.NotFound)
                         {
                             return new HttpSourceResult(HttpSourceResultStatus.NotFound);
                         }
 
-                        if (response.StatusCode == HttpStatusCode.NoContent)
+                        if (semaphoreResponse.Response.StatusCode == HttpStatusCode.NoContent)
                         {
                             // Ignore reading and caching the empty stream.
                             return new HttpSourceResult(HttpSourceResultStatus.NoContent);
                         }
 
-                        response.EnsureSuccessStatusCode();
+                        semaphoreResponse.Response.EnsureSuccessStatusCode();
 
                         await CreateCacheFileAsync(
                             result,
                             request.Uri,
-                            response,
+                            semaphoreResponse.Response,
                             request.CacheContext,
                             request.EnsureValidContents,
                             lockedToken);
@@ -154,26 +154,23 @@ namespace NuGet.Protocol
             ILogger log,
             CancellationToken token)
         {
-            Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
-                request.RequestFactory,
-                request.RequestTimeout,
-                request.DownloadTimeout,
+            return await ProcessResponseAsync(
+                request,
+                async response =>
+                {
+                    if ((request.IgnoreNotFounds && response.StatusCode == HttpStatusCode.NotFound) ||
+                         response.StatusCode == HttpStatusCode.NoContent)
+                    {
+                        return await processAsync(null);
+                    }
+
+                    response.EnsureSuccessStatusCode();
+
+                    var networkStream = await response.Content.ReadAsStreamAsync();
+                    return await processAsync(networkStream);
+                },
                 log,
                 token);
-
-            using (var response = await requestFactory())
-            {
-                if ((request.IgnoreNotFounds && response.StatusCode == HttpStatusCode.NotFound) ||
-                     response.StatusCode == HttpStatusCode.NoContent)
-                {
-                    return await processAsync(null);
-                }
-
-                response.EnsureSuccessStatusCode();
-
-                var networkStream = await response.Content.ReadAsStreamAsync();
-                return await processAsync(networkStream);
-            }
         }
 
         public async Task<T> ProcessResponseAsync<T>(
@@ -182,16 +179,17 @@ namespace NuGet.Protocol
             ILogger log,
             CancellationToken token)
         {
-            Func<Task<HttpResponseMessage>> requestFactory = () => SendWithRetrySupportAsync(
+            Func<Task<SemaphoreResponse>> responseFactory = () => GetSemaphoreResponseAsync(
                 request.RequestFactory,
                 request.RequestTimeout,
                 request.DownloadTimeout,
+                request.Semaphore,
                 log,
                 token);
 
-            using (var response = await requestFactory())
+            using (var semaphoreResponse = await responseFactory())
             {
-                return await processAsync(response);
+                return await processAsync(semaphoreResponse.Response);
             }
         }
 
@@ -216,10 +214,11 @@ namespace NuGet.Protocol
                 token: token);
         }
 
-        private async Task<HttpResponseMessage> SendWithRetrySupportAsync(
+        private async Task<SemaphoreResponse> GetSemaphoreResponseAsync(
             Func<HttpRequestMessage> requestFactory,
             TimeSpan requestTimeout,
             TimeSpan downloadTimeout,
+            SemaphoreSlim semaphore,
             ILogger log,
             CancellationToken cancellationToken)
         {
@@ -231,8 +230,30 @@ namespace NuGet.Protocol
                 RequestTimeout = requestTimeout,
                 DownloadTimeout = downloadTimeout
             };
-            
-            return await RetryHandler.SendAsync(request, log, cancellationToken);
+
+            // Optionally, acquire the semaphore.
+            if (semaphore != null)
+            {
+                await semaphore.WaitAsync();
+            }
+
+            try
+            {
+                var response = await RetryHandler.SendAsync(request, log, cancellationToken);
+                return new SemaphoreResponse(semaphore, response);
+            }
+            catch
+            {
+                // If the request fails, release the semaphore. If no exception is thrown by
+                // SendAsync, then the semaphore is released when the HTTP response message is
+                // disposed.
+                if (semaphore != null)
+                {
+                    semaphore.Release();
+                }
+
+                throw;
+            }
         }
 
         private async Task EnsureHttpClientAsync()
@@ -475,6 +496,39 @@ namespace NuGet.Protocol
             }
 
             _httpClientLock.Dispose();
+        }
+
+        private class SemaphoreResponse : IDisposable
+        {
+            private static readonly object _semaphoreLock = new object();
+
+            public SemaphoreResponse(SemaphoreSlim semaphore, HttpResponseMessage response)
+            {
+                if (response == null)
+                {
+                    throw new ArgumentNullException(nameof(response));
+                }
+
+                Semaphore = semaphore;
+                Response = response;
+            }
+
+            public SemaphoreSlim Semaphore { get; private set; }
+            public HttpResponseMessage Response { get; }
+
+            public void Dispose()
+            {
+                Response.Dispose();
+
+                lock (_semaphoreLock)
+                {
+                    if (Semaphore != null)
+                    {
+                        Semaphore.Release();
+                        Semaphore = null;
+                    }
+                }
+            }
         }
 
         private class HttpCacheResult
