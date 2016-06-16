@@ -791,9 +791,6 @@ namespace NuGet.Commands.Test
                 // the first restore
                 var initialResult = await tc.Command.ExecuteAsync();
                 await initialResult.CommitAsync(tc.Logger, CancellationToken.None);
-                
-                tc.SetIsLocked(initialResult.LockFilePath, true, tc.Logger);
-                tc.SetIsLocked(initialResult.ToolRestoreResults.First().LockFilePath, true, tc.Logger);
 
                 // reset
                 tc.Logger = new TestLogger();
@@ -1185,13 +1182,6 @@ namespace NuGet.Commands.Test
 
                 Request.LockFilePath = Path.Combine(Project.FullName, "project.lock.json");
                 Command = new RestoreCommand(Request);
-            }
-
-            public void SetIsLocked(string path, bool isLocked, ILogger logger)
-            {
-                var lockFile = LockFileUtilities.GetLockFile(path, logger);
-                lockFile.IsLocked = isLocked;
-                new LockFileFormat().Write(path, lockFile);
             }
         }
     }
