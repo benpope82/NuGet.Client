@@ -226,7 +226,10 @@ namespace NuGet.Protocol.Tests
                 var packageSource = new PackageSource(FakeSource);
                 var handler = new HttpClientHandler();
                 var handlerResource = new HttpHandlerResourceV3(handler, handler);
-                var httpSource = new HttpSource(packageSource, () => Task.FromResult((HttpHandlerResource)handlerResource))
+                var httpSource = new HttpSource(
+                    packageSource,
+                    () => Task.FromResult((HttpHandlerResource)handlerResource),
+                    NullThrottle.Instance)
                 {
                     HttpCacheDirectory = td
                 };

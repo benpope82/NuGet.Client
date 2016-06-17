@@ -39,7 +39,7 @@ namespace NuGet.Protocol
         public HttpSource(
             PackageSource packageSource,
             Func<Task<HttpHandlerResource>> messageHandlerFactory,
-            IThrottle throttle = null)
+            IThrottle throttle)
         {
             if (packageSource == null)
             {
@@ -53,7 +53,7 @@ namespace NuGet.Protocol
 
             if (throttle == null)
             {
-                throttle = NullThrottle.Instance;
+                throw new ArgumentNullException(nameof(throttle));
             }
 
             _packageSource = packageSource;
@@ -483,8 +483,23 @@ namespace NuGet.Protocol
             return false;
         }
 
-        public static HttpSource Create(SourceRepository source, IThrottle throttle = null)
+        public static HttpSource Create(SourceRepository source)
         {
+            return Create(source, NullThrottle.Instance);
+        }
+
+        public static HttpSource Create(SourceRepository source, IThrottle throttle)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            if (throttle == null)
+            {
+                throw new ArgumentNullException(nameof(throttle));
+            }
+
             Func<Task<HttpHandlerResource>> factory = () => source.GetResourceAsync<HttpHandlerResource>();
 
             return new HttpSource(source.PackageSource, factory, throttle);
