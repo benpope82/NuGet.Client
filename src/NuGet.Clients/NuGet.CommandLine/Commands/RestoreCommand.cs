@@ -50,6 +50,11 @@ namespace NuGet.CommandLine
 
         public override async Task ExecuteCommandAsync()
         {
+            if (DisableParallelProcessing)
+            {
+                HttpSourceResourceProvider.Throttle = new SemaphoreSlimThrottle(new SemaphoreSlim(1));
+            }
+
             CalculateEffectivePackageSaveMode();
 
             var restoreSummaries = new List<RestoreSummary>();
