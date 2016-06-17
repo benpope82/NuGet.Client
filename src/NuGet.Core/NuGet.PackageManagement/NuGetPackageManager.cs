@@ -178,7 +178,7 @@ namespace NuGet.PackageManagement
             // of the closure \ NuGetPackageManager.
             PackagesFolderSourceRepository = SourceRepositoryProvider.CreateRepository(
                 new PackageSource(packagesFolderPath),
-                FeedType.FileSystemV2);
+                FeedType.FileSystemPackagesConfig);
         }
 
         /// <summary>
