@@ -27,6 +27,7 @@ namespace NuGet.Protocol
         private HttpClient _httpClient;
         private string _httpCacheDirectory;
         private readonly PackageSource _packageSource;
+        private readonly IThrottle _throttle;
 
         // Only one thread may re-create the http client at a time.
         private readonly SemaphoreSlim _httpClientLock = new SemaphoreSlim(1, 1);
@@ -35,7 +36,10 @@ namespace NuGet.Protocol
         /// <summary>This API is intended only for testing purposes and should not be used in product code.</summary>
         public IHttpRetryHandler RetryHandler { get; set; } = new HttpRetryHandler();
 
-        public HttpSource(PackageSource packageSource, Func<Task<HttpHandlerResource>> messageHandlerFactory)
+        public HttpSource(
+            PackageSource packageSource,
+            Func<Task<HttpHandlerResource>> messageHandlerFactory,
+            IThrottle throttle = null)
         {
             if (packageSource == null)
             {
@@ -50,6 +54,7 @@ namespace NuGet.Protocol
             _packageSource = packageSource;
             _baseUri = packageSource.SourceUri;
             _messageHandlerFactory = messageHandlerFactory;
+            _throttle = throttle;
         }
 
         /// <summary>
@@ -108,11 +113,10 @@ namespace NuGet.Protocol
                         return requestMessage;
                     };
                     
-                    Func<Task<SemaphoreResponse>> responseFactory = () => GetSemaphoreResponseAsync(
+                    Func<Task<ThrottledResponse>> responseFactory = () => GetThrottledResponse(
                         requestFactory,
                         request.RequestTimeout,
                         request.DownloadTimeout,
-                        request.Semaphore,
                         log,
                         lockedToken);
 
@@ -179,11 +183,10 @@ namespace NuGet.Protocol
             ILogger log,
             CancellationToken token)
         {
-            Func<Task<SemaphoreResponse>> responseFactory = () => GetSemaphoreResponseAsync(
+            Func<Task<ThrottledResponse>> responseFactory = () => GetThrottledResponse(
                 request.RequestFactory,
                 request.RequestTimeout,
                 request.DownloadTimeout,
-                request.Semaphore,
                 log,
                 token);
 
@@ -214,11 +217,10 @@ namespace NuGet.Protocol
                 token: token);
         }
 
-        private async Task<SemaphoreResponse> GetSemaphoreResponseAsync(
+        private async Task<ThrottledResponse> GetThrottledResponse(
             Func<HttpRequestMessage> requestFactory,
             TimeSpan requestTimeout,
             TimeSpan downloadTimeout,
-            SemaphoreSlim semaphore,
             ILogger log,
             CancellationToken cancellationToken)
         {
@@ -232,24 +234,24 @@ namespace NuGet.Protocol
             };
 
             // Optionally, acquire the semaphore.
-            if (semaphore != null)
+            if (_throttle != null)
             {
-                await semaphore.WaitAsync();
+                await _throttle.WaitAsync();
             }
 
             try
             {
                 var response = await RetryHandler.SendAsync(request, log, cancellationToken);
-                return new SemaphoreResponse(semaphore, response);
+                return new ThrottledResponse(_throttle, response);
             }
             catch
             {
                 // If the request fails, release the semaphore. If no exception is thrown by
                 // SendAsync, then the semaphore is released when the HTTP response message is
                 // disposed.
-                if (semaphore != null)
+                if (_throttle != null)
                 {
-                    semaphore.Release();
+                    _throttle.Release();
                 }
 
                 throw;
@@ -481,11 +483,11 @@ namespace NuGet.Protocol
             return false;
         }
 
-        public static HttpSource Create(SourceRepository source)
+        public static HttpSource Create(SourceRepository source, IThrottle throttle = null)
         {
             Func<Task<HttpHandlerResource>> factory = () => source.GetResourceAsync<HttpHandlerResource>();
 
-            return new HttpSource(source.PackageSource, factory);
+            return new HttpSource(source.PackageSource, factory, throttle);
         }
 
         public void Dispose()
@@ -498,34 +500,34 @@ namespace NuGet.Protocol
             _httpClientLock.Dispose();
         }
 
-        private class SemaphoreResponse : IDisposable
+        private class ThrottledResponse : IDisposable
         {
-            private static readonly object _semaphoreLock = new object();
+            private IThrottle _throttle;
+            private readonly object _throttleLock = new object();
 
-            public SemaphoreResponse(SemaphoreSlim semaphore, HttpResponseMessage response)
+            public ThrottledResponse(IThrottle throttle, HttpResponseMessage response)
             {
                 if (response == null)
                 {
                     throw new ArgumentNullException(nameof(response));
                 }
 
-                Semaphore = semaphore;
+                _throttle = throttle;
                 Response = response;
             }
-
-            public SemaphoreSlim Semaphore { get; private set; }
+            
             public HttpResponseMessage Response { get; }
 
             public void Dispose()
             {
                 Response.Dispose();
 
-                lock (_semaphoreLock)
+                lock (_throttleLock)
                 {
-                    if (Semaphore != null)
+                    if (_throttle != null)
                     {
-                        Semaphore.Release();
-                        Semaphore = null;
+                        _throttle.Release();
+                        _throttle = null;
                     }
                 }
             }

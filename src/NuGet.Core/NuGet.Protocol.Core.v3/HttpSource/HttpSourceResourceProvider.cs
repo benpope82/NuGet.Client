@@ -17,6 +17,11 @@ namespace NuGet.Protocol
         private readonly ConcurrentDictionary<PackageSource, HttpSourceResource> _cache
             = new ConcurrentDictionary<PackageSource, HttpSourceResource>();
 
+        /// <summary>
+        /// The throttle to apply to all <see cref="HttpSource"/> HTTP requests.
+        /// </summary>
+        public static IThrottle Throttle { get; set; }
+
         public HttpSourceResourceProvider()
             : base(typeof(HttpSourceResource),
                   nameof(HttpSourceResource),
@@ -33,7 +38,7 @@ namespace NuGet.Protocol
             if (source.PackageSource.IsHttp)
             {
                 curResource = _cache.GetOrAdd(source.PackageSource, 
-                    (packageSource) => new HttpSourceResource(HttpSource.Create(source)));
+                    (packageSource) => new HttpSourceResource(HttpSource.Create(source, Throttle)));
             }
 
             return Task.FromResult(new Tuple<bool, INuGetResource>(curResource != null, curResource));
