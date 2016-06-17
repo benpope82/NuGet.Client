@@ -24,5 +24,10 @@ namespace NuGet.Protocol
         {
             _semaphore.Release();
         }
+
+        public static SemaphoreSlimThrottle CreateBinarySemaphore()
+        {
+            return new SemaphoreSlimThrottle(new SemaphoreSlim(1));
+        }
     }
 }

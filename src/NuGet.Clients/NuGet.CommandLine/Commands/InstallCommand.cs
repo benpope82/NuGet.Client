@@ -63,7 +63,7 @@ namespace NuGet.CommandLine
         {
             if (DisableParallelProcessing)
             {
-                HttpSourceResourceProvider.Throttle = new SemaphoreSlimThrottle(new SemaphoreSlim(1));
+                HttpSourceResourceProvider.Throttle = SemaphoreSlimThrottle.CreateBinarySemaphore();
             }
 
             CalculateEffectivePackageSaveMode();

@@ -29,6 +29,93 @@ namespace NuGet.Protocol.Tests
         private const string FakeSource = "https://fake.server/users.json";
 
         [Fact]
+        public async Task HttpSource_GetAsync_ThrottlesRequests()
+        {
+            // Arrange
+            using (var td = TestFileSystemUtility.CreateRandomTestFolder())
+            {
+                var tc = new TestContext(td);
+
+                // Act
+                await tc.HttpSource.GetAsync(
+                    new HttpSourceCachedRequest(tc.Url, tc.CacheKey, tc.CacheContext),
+                    tc.Logger,
+                    token: CancellationToken.None);
+
+                // Assert
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
+            }
+        }
+
+        [Fact]
+        public async Task HttpSource_GetJObjectAsync_ThrottlesRequests()
+        {
+            // Arrange
+            using (var td = TestFileSystemUtility.CreateRandomTestFolder())
+            {
+                var tc = new TestContext(td);
+
+                tc.SetResponseSequence(new[]
+                {
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") },
+                });
+
+                // Act
+                await tc.HttpSource.GetJObjectAsync(
+                    new HttpSourceRequest(tc.Url, tc.Logger),
+                    tc.Logger,
+                    token: CancellationToken.None);
+
+                // Assert
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
+            }
+        }
+
+        [Fact]
+        public async Task HttpSource_ProcessStreamAsync_ThrottlesRequests()
+        {
+            // Arrange
+            using (var td = TestFileSystemUtility.CreateRandomTestFolder())
+            {
+                var tc = new TestContext(td);
+
+                // Act
+                await tc.HttpSource.ProcessStreamAsync(
+                    new HttpSourceRequest(tc.Url, tc.Logger),
+                    stream => Task.FromResult(true),
+                    tc.Logger,
+                    token: CancellationToken.None);
+
+                // Assert
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
+            }
+        }
+
+        [Fact]
+        public async Task HttpSource_ProcessResponseAsync_ThrottlesRequests()
+        {
+            // Arrange
+            using (var td = TestFileSystemUtility.CreateRandomTestFolder())
+            {
+                var tc = new TestContext(td);
+
+                // Act
+                await tc.HttpSource.ProcessResponseAsync(
+                    new HttpSourceRequest(tc.Url, tc.Logger),
+                    stream => Task.FromResult(true),
+                    tc.Logger,
+                    token: CancellationToken.None);
+
+                // Assert
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
+            }
+        }
+
+        [Fact]
         public async Task HttpSource_GetNoContent()
         {
             // Arrange
@@ -75,9 +162,7 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 await tc.HttpSource.ProcessResponseAsync(
-                    new HttpSourceRequest(
-                        tc.Url,
-                        () => new HttpRequestMessage(HttpMethod.Get, tc.Url)),
+                    new HttpSourceRequest(() => new HttpRequestMessage(HttpMethod.Get, tc.Url)),
                     response =>
                     {
                         return Task.FromResult(0);
@@ -109,9 +194,7 @@ namespace NuGet.Protocol.Tests
 
                 // Act
                 await tc.HttpSource.ProcessResponseAsync(
-                    new HttpSourceRequest(
-                        tc.Url,
-                        () => new HttpRequestMessage(HttpMethod.Get, tc.Url))
+                    new HttpSourceRequest(() => new HttpRequestMessage(HttpMethod.Get, tc.Url))
                     {
                         RequestTimeout = timeout,
                     },
@@ -189,6 +272,8 @@ namespace NuGet.Protocol.Tests
                 Assert.False(tc.ValidatedCacheContent, "The cache content should not have been cached at all.");
                 Assert.True(tc.ValidatedNetworkContent, "The network content should have been validated.");
                 Assert.Equal(tc.NetworkContent, tc.ReadStream(result.Stream));
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
             }
         }
 
@@ -216,6 +301,8 @@ namespace NuGet.Protocol.Tests
                 Assert.Same(tc.NetworkValidationException, exception);
                 Assert.False(tc.ValidatedCacheContent, "The cache content should not have been cached at all.");
                 Assert.True(tc.ValidatedNetworkContent, "The network content should have been validated.");
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
             }
         }
 
@@ -244,6 +331,8 @@ namespace NuGet.Protocol.Tests
                 Assert.True(tc.ValidatedCacheContent, "The cache content should have been validated.");
                 Assert.False(tc.ValidatedNetworkContent, "The network should not have been queried at all.");
                 Assert.Equal(tc.CacheContent, tc.ReadStream(result.Stream));
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Never);
+                tc.Throttle.Verify(x => x.Release(), Times.Never);
             }
         }
 
@@ -272,6 +361,8 @@ namespace NuGet.Protocol.Tests
                 Assert.True(tc.ValidatedCacheContent, "The cache content should have been validated.");
                 Assert.True(tc.ValidatedNetworkContent, "The network content should have been validated.");
                 Assert.Equal(tc.NetworkContent, new StreamReader(result.Stream).ReadToEnd());
+                tc.Throttle.Verify(x => x.WaitAsync(), Times.Once);
+                tc.Throttle.Verify(x => x.Release(), Times.Once);
             }
         }
 
@@ -290,6 +381,7 @@ namespace NuGet.Protocol.Tests
                 CacheKey = "CacheKey";
                 Url = "https://fake.server/foo/bar/something.json";
                 Credentials = new NetworkCredential("foo", "bar");
+                Throttle = new Mock<IThrottle>();
 
                 if (!RuntimeEnvironmentHelper.IsWindows)
                 {
@@ -312,7 +404,7 @@ namespace NuGet.Protocol.Tests
                 RetryHandlerMock = new Mock<IHttpRetryHandler>();
 
                 // target
-                HttpSource = new HttpSource(packageSource, () => Task.FromResult((HttpHandlerResource)handlerResource))
+                HttpSource = new HttpSource(packageSource, () => Task.FromResult((HttpHandlerResource)handlerResource), Throttle.Object)
                 {
                     HttpCacheDirectory = TestDirectory
                 };
@@ -343,6 +435,7 @@ namespace NuGet.Protocol.Tests
             public bool ValidatedCacheContent { get; set; }
             public Mock<IHttpRetryHandler> RetryHandlerMock { get; }
             public ICredentials Credentials { get; }
+            public Mock<IThrottle> Throttle { get; private set; }
 
             public void WriteToCache(string cacheKey, string content)
             {

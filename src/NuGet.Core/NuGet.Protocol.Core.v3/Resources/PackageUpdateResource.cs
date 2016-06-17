@@ -262,9 +262,7 @@ namespace NuGet.Protocol.Core.Types
         {
             var serviceEndpointUrl = GetServiceEndpointUrl(source, string.Empty);
             await _httpSource.ProcessResponseAsync(
-                new HttpSourceRequest(
-                    serviceEndpointUrl,
-                    () => CreateRequest(serviceEndpointUrl, pathToPackage, apiKey, logger)),
+                new HttpSourceRequest(() => CreateRequest(serviceEndpointUrl, pathToPackage, apiKey, logger)),
                 response =>
                 {
                     response.EnsureSuccessStatusCode();
@@ -372,7 +370,6 @@ namespace NuGet.Protocol.Core.Types
 
             await _httpSource.ProcessResponseAsync(
                 new HttpSourceRequest(
-                    serviceEndpointUrl,
                     () =>
                     {
                         // Review: Do these values need to be encoded in any way?

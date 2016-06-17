@@ -35,11 +35,6 @@ namespace NuGet.Protocol
             Uri = uri;
             CacheKey = cacheKey;
             CacheContext = cacheContext;
-            AcceptHeaderValues = new List<MediaTypeWithQualityHeaderValue>();
-            IgnoreNotFounds = false;
-            EnsureValidContents = null;
-            RequestTimeout = HttpSourceRequest.DefaultRequestTimeout;
-            DownloadTimeout = HttpRetryHandlerRequest.DefaultDownloadTimeout;
         }
 
         /// <summary>
@@ -62,11 +57,12 @@ namespace NuGet.Protocol
         /// <summary>
         /// The header values to apply when building the <see cref="HttpRequestMessage"/>.
         /// </summary>
-        public IList<MediaTypeWithQualityHeaderValue> AcceptHeaderValues { get; }
+        public IList<MediaTypeWithQualityHeaderValue> AcceptHeaderValues { get; } = new List<MediaTypeWithQualityHeaderValue>();
 
         /// <summary>
         /// When processing the <see cref="HttpResponseMessage"/>, this flag allows
-        /// <code>404 Not Found</code> to be interpreted as a null response.
+        /// <code>404 Not Found</code> to be interpreted as a null response. This value defaults
+        /// to <code>false</code>.
         /// </summary>
         public bool IgnoreNotFounds { get; set; }
 
@@ -82,9 +78,9 @@ namespace NuGet.Protocol
         /// this means that we wait this amount of time for only the HTTP headers to be returned.
         /// Downloading the response body is not included in this timeout.
         /// </summary>
-        public TimeSpan RequestTimeout { get; set; }
+        public TimeSpan RequestTimeout { get; set; } = HttpSourceRequest.DefaultRequestTimeout;
 
         /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
-        public TimeSpan DownloadTimeout { get; set; }
+        public TimeSpan DownloadTimeout { get; set; } = HttpRetryHandlerRequest.DefaultDownloadTimeout;
     }
 }

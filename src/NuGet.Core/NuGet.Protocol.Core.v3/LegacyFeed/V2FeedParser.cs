@@ -433,7 +433,6 @@ namespace NuGet.Protocol
         {
             return await _httpSource.ProcessResponseAsync(
                 new HttpSourceRequest(
-                    uri,
                     () =>
                     {
                         var request = HttpRequestMessageFactory.Create(HttpMethod.Get, uri, log);

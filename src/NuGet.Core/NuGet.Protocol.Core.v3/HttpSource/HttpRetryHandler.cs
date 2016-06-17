@@ -86,23 +86,16 @@ namespace NuGet.Protocol
                             timeoutMessage,
                             cancellationToken);
 
-                        // Wrap the response stream so that the download can timeout and the HTTP
-                        // semaphore is respected.
-                        Stream networkStream;
+                        // Wrap the response stream so that the download can timeout.
                         if (response.Content != null)
                         {
-                            networkStream = await response.Content.ReadAsStreamAsync();
+                            var networkStream = await response.Content.ReadAsStreamAsync();
+                            var newContent = new DownloadTimeoutStreamContent(
+                                requestUri,
+                                networkStream,
+                                request.DownloadTimeout);
+                            response.Content = newContent;
                         }
-                        else
-                        {
-                            networkStream = Stream.Null;
-                        }
-
-                        var newContent = new DownloadTimeoutStreamContent(
-                            requestUri,
-                            networkStream,
-                            request.DownloadTimeout);
-                        response.Content = newContent;
 
                         log.LogInformation("  " + string.Format(
                             CultureInfo.InvariantCulture,

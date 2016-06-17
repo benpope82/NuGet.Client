@@ -51,6 +51,11 @@ namespace NuGet.Protocol
                 throw new ArgumentNullException(nameof(messageHandlerFactory));
             }
 
+            if (throttle == null)
+            {
+                throttle = NullThrottle.Instance;
+            }
+
             _packageSource = packageSource;
             _baseUri = packageSource.SourceUri;
             _messageHandlerFactory = messageHandlerFactory;
@@ -113,32 +118,32 @@ namespace NuGet.Protocol
                         return requestMessage;
                     };
                     
-                    Func<Task<ThrottledResponse>> responseFactory = () => GetThrottledResponse(
+                    Func<Task<ThrottledResponse>> throttledResponseFactory = () => GetThrottledResponse(
                         requestFactory,
                         request.RequestTimeout,
                         request.DownloadTimeout,
                         log,
                         lockedToken);
 
-                    using (var semaphoreResponse = await responseFactory())
+                    using (var throttledResponse = await throttledResponseFactory())
                     {
-                        if (request.IgnoreNotFounds && semaphoreResponse.Response.StatusCode == HttpStatusCode.NotFound)
+                        if (request.IgnoreNotFounds && throttledResponse.Response.StatusCode == HttpStatusCode.NotFound)
                         {
                             return new HttpSourceResult(HttpSourceResultStatus.NotFound);
                         }
 
-                        if (semaphoreResponse.Response.StatusCode == HttpStatusCode.NoContent)
+                        if (throttledResponse.Response.StatusCode == HttpStatusCode.NoContent)
                         {
                             // Ignore reading and caching the empty stream.
                             return new HttpSourceResult(HttpSourceResultStatus.NoContent);
                         }
 
-                        semaphoreResponse.Response.EnsureSuccessStatusCode();
+                        throttledResponse.Response.EnsureSuccessStatusCode();
 
                         await CreateCacheFileAsync(
                             result,
                             request.Uri,
-                            semaphoreResponse.Response,
+                            throttledResponse.Response,
                             request.CacheContext,
                             request.EnsureValidContents,
                             lockedToken);
@@ -183,16 +188,16 @@ namespace NuGet.Protocol
             ILogger log,
             CancellationToken token)
         {
-            Func<Task<ThrottledResponse>> responseFactory = () => GetThrottledResponse(
+            Func<Task<ThrottledResponse>> throttledResponseFactory = () => GetThrottledResponse(
                 request.RequestFactory,
                 request.RequestTimeout,
                 request.DownloadTimeout,
                 log,
                 token);
 
-            using (var semaphoreResponse = await responseFactory())
+            using (var throttledResponse = await throttledResponseFactory())
             {
-                return await processAsync(semaphoreResponse.Response);
+                return await processAsync(throttledResponse.Response);
             }
         }
 
@@ -233,29 +238,24 @@ namespace NuGet.Protocol
                 DownloadTimeout = downloadTimeout
             };
 
-            // Optionally, acquire the semaphore.
-            if (_throttle != null)
-            {
-                await _throttle.WaitAsync();
-            }
+            // Acquire the semaphore.
+            await _throttle.WaitAsync();
 
+            HttpResponseMessage response;
             try
             {
-                var response = await RetryHandler.SendAsync(request, log, cancellationToken);
-                return new ThrottledResponse(_throttle, response);
+                response = await RetryHandler.SendAsync(request, log, cancellationToken);
             }
             catch
             {
                 // If the request fails, release the semaphore. If no exception is thrown by
                 // SendAsync, then the semaphore is released when the HTTP response message is
                 // disposed.
-                if (_throttle != null)
-                {
-                    _throttle.Release();
-                }
-
+                _throttle.Release();
                 throw;
             }
+
+            return new ThrottledResponse(_throttle, response);
         }
 
         private async Task EnsureHttpClientAsync()
@@ -507,6 +507,11 @@ namespace NuGet.Protocol
 
             public ThrottledResponse(IThrottle throttle, HttpResponseMessage response)
             {
+                if (throttle == null)
+                {
+                    throw new ArgumentNullException(nameof(throttle));
+                }
+
                 if (response == null)
                 {
                     throw new ArgumentNullException(nameof(response));
@@ -520,14 +525,19 @@ namespace NuGet.Protocol
 
             public void Dispose()
             {
-                Response.Dispose();
-
-                lock (_throttleLock)
+                try
                 {
-                    if (_throttle != null)
+                    Response.Dispose();
+                }
+                finally
+                {
+                    lock (_throttleLock)
                     {
-                        _throttle.Release();
-                        _throttle = null;
+                        if (_throttle != null)
+                        {
+                            _throttle.Release();
+                            _throttle = null;
+                        }
                     }
                 }
             }

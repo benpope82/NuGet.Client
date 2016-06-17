@@ -3,7 +3,6 @@
 
 using System;
 using System.Net.Http;
-using System.Threading;
 using NuGet.Common;
 
 namespace NuGet.Protocol
@@ -16,57 +15,34 @@ namespace NuGet.Protocol
         public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(100);
 
         public HttpSourceRequest(string uri, ILogger log)
-            : this(
-                uri,
-                () => HttpRequestMessageFactory.Create(HttpMethod.Get, uri, log))
+            : this(() => HttpRequestMessageFactory.Create(HttpMethod.Get, uri, log))
         {
         }
 
         public HttpSourceRequest(Uri uri, ILogger log)
-            : this(
-                uri?.ToString(),
-                () => HttpRequestMessageFactory.Create(HttpMethod.Get, uri, log))
+            : this(() => HttpRequestMessageFactory.Create(HttpMethod.Get, uri, log))
         {
         }
 
-        public HttpSourceRequest(Uri uri, Func<HttpRequestMessage> requestFactory)
-            : this(uri?.ToString(), requestFactory)
+        public HttpSourceRequest(Func<HttpRequestMessage> requestFactory)
         {
-        }
-
-        public HttpSourceRequest(string uri, Func<HttpRequestMessage> requestFactory)
-        {
-            if (uri == null)
-            {
-                throw new ArgumentNullException(nameof(uri));
-            }
-
             if (requestFactory == null)
             {
                 throw new ArgumentNullException(nameof(requestFactory));
             }
-
-            Uri = uri;
+            
             RequestFactory = requestFactory;
-            IgnoreNotFounds = false;
-            RequestTimeout = DefaultRequestTimeout;
-            DownloadTimeout = HttpRetryHandlerRequest.DefaultDownloadTimeout;
         }
-
-        /// <summary>
-        /// The URI that is bing requested by the <see cref="RequestFactory"/>. This value is only
-        /// used for messages intented for the user or log messages.
-        /// </summary>
-        public string Uri { get; }
         
         /// <summary>
-        /// A factory that can be called repeated to build the HTTP request message.
+        /// A factory that can be called repeatedly to build the HTTP request message.
         /// </summary>
         public Func<HttpRequestMessage> RequestFactory { get; }
 
         /// <summary>
         /// When processing the <see cref="HttpResponseMessage"/>, this flag allows
-        /// <code>404 Not Found</code> to be interpreted as a null response.
+        /// <code>404 Not Found</code> to be interpreted as a null response. This value defaults
+        /// to <code>false</code>.
         /// </summary>
         public bool IgnoreNotFounds { get; set; }
 
@@ -76,9 +52,9 @@ namespace NuGet.Protocol
         /// this means that we wait this amount of time for only the HTTP headers to be returned.
         /// Downloading the response body is not included in this timeout.
         /// </summary>
-        public TimeSpan RequestTimeout { get; set; }
+        public TimeSpan RequestTimeout { get; set; } = DefaultRequestTimeout;
 
         /// <summary>The timeout to apply to <see cref="DownloadTimeoutStream"/> instances.</summary>
-        public TimeSpan DownloadTimeout { get; set; }
+        public TimeSpan DownloadTimeout { get; set; } = HttpRetryHandlerRequest.DefaultDownloadTimeout;
     }
 }

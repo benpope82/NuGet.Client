@@ -126,7 +126,7 @@ namespace NuGet.CommandLine.XPlat
 
                         if (restoreContext.DisableParallel)
                         {
-                            HttpSourceResourceProvider.Throttle = new SemaphoreSlimThrottle(new SemaphoreSlim(1));
+                            HttpSourceResourceProvider.Throttle = SemaphoreSlimThrottle.CreateBinarySemaphore();
                         }
 
                         var restoreSummaries = await RestoreRunner.Run(restoreContext);
